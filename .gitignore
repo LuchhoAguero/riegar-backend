@@ -1,0 +1,8 @@
+# Dependencias (son miles de archivos, se instalan con npm install)
+node_modules/
+
+# Variables de entorno (SEGURIDAD)
+.env
+
+# Logs de errores
+npm-debug.log
