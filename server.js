@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const knexConfig = require("./knexfile").development; // Importa la configuración de la DB
 const knex = require("knex")(knexConfig); // Inicializa Knex
+const nodemailer = require("nodemailer");
 const bcrypt = require("bcrypt"); // Importa bcrypt para hashear
 const authMiddleware = require("./authMiddleware");
 const app = express();
@@ -242,6 +243,33 @@ app.put("/api/calculos/:id", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Error en el servidor." });
   }
 });
+// Borrar un cálculo específico
+app.delete("/api/calculos/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user_id = req.user.userId;
+
+    // 1. Verificamos que el cálculo sea TUYO (seguridad)
+    const calculo = await knex("calculos")
+      .join("fincas", "calculos.finca_id", "fincas.id")
+      .where({ "calculos.id": id, "fincas.user_id": user_id })
+      .first();
+
+    if (!calculo) {
+      return res
+        .status(404)
+        .json({ error: "Cálculo no encontrado o no tienes permiso." });
+    }
+
+    // 2. Borramos
+    await knex("calculos").where({ id }).del();
+
+    res.json({ message: "Cálculo eliminado correctamente." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error en el servidor." });
+  }
+});
 /**
  * Borrar una finca (y todos sus cálculos asociados)
  */
@@ -299,6 +327,52 @@ app.put("/api/fincas/:id", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Error al actualizar finca:", error);
     res.status(500).json({ error: "Error en el servidor." });
+  }
+});
+// --- RUTA DE CONTACTO ---
+app.post("/api/contact", async (req, res) => {
+  const { name, email, message } = req.body;
+
+  // 1. Validar datos
+  if (!name || !email || !message) {
+    return res
+      .status(400)
+      .json({ error: "Todos los campos son obligatorios." });
+  }
+
+  // 2. Configurar el "Transportador" (El cartero)
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  // 3. Configurar el Correo
+  const mailOptions = {
+    from: process.env.EMAIL_USER, // Quién lo envía (tu servidor)
+    to: process.env.EMAIL_USER, // A quién le llega (A TI MISMO, para que leas el mensaje)
+    subject: `Nuevo mensaje de RiegAR: ${name}`,
+    html: `
+      <h3>Tienes un nuevo mensaje de contacto</h3>
+      <p><strong>Nombre:</strong> ${name}</p>
+      <p><strong>Email del usuario:</strong> ${email}</p>
+      <p><strong>Mensaje:</strong></p>
+      <blockquote style="background: #f9f9f9; padding: 10px; border-left: 5px solid #ccc;">
+        ${message}
+      </blockquote>
+    `,
+    replyTo: email, // Para que al dar "Responder" le contestes al usuario
+  };
+
+  // 4. Enviar
+  try {
+    await transporter.sendMail(mailOptions);
+    res.status(200).json({ message: "Correo enviado con éxito." });
+  } catch (error) {
+    console.error("Error enviando correo:", error);
+    res.status(500).json({ error: "No se pudo enviar el correo." });
   }
 });
 // Poner el servidor a escuchar
