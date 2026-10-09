@@ -6,3 +6,12 @@ node_modules/
 
 # Logs de errores
 npm-debug.log
+
+# Certificados y claves locales para la conexión TLS
+*.pem
+*.key
+*.crt
+certs/
+
+# Paquetes locales de auditoría/entrega
+*.zip

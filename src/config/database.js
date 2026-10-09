@@ -1,6 +1,7 @@
 const path = require("path");
+const fs = require("fs");
 
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 
 function getDatabaseSetting(name, railwayName) {
   return process.env[name] || process.env[railwayName];
@@ -8,6 +9,7 @@ function getDatabaseSetting(name, railwayName) {
 
 function getDatabaseConnection() {
   const port = getDatabaseSetting("DB_PORT", "MYSQLPORT");
+  const ssl = getDatabaseSsl();
 
   return {
     host: getDatabaseSetting("DB_HOST", "MYSQLHOST"),
@@ -15,7 +17,29 @@ function getDatabaseConnection() {
     user: getDatabaseSetting("DB_USER", "MYSQLUSER"),
     password: getDatabaseSetting("DB_PASSWORD", "MYSQLPASSWORD"),
     database: getDatabaseSetting("DB_NAME", "MYSQLDATABASE"),
+    ...(ssl ? { ssl } : {}),
   };
+}
+
+function getDatabaseSsl() {
+  const enabled = process.env.DB_SSL || "false";
+  if (enabled !== "true" && enabled !== "false") {
+    throw new Error("DB_SSL must be true or false");
+  }
+  if (enabled === "false") return undefined;
+
+  if (!process.env.DB_SSL_CA_PATH) {
+    throw new Error("DB_SSL_CA_PATH is required when DB_SSL=true");
+  }
+
+  try {
+    return {
+      ca: fs.readFileSync(process.env.DB_SSL_CA_PATH, "utf8"),
+      rejectUnauthorized: true,
+    };
+  } catch {
+    throw new Error("Cannot read the CA certificate at DB_SSL_CA_PATH");
+  }
 }
 
 function createKnexConfig() {
@@ -29,6 +53,7 @@ function createKnexConfig() {
 }
 
 function validateDatabaseConfig() {
+  getDatabaseSsl();
   const requiredSettings = [
     ["DB_HOST", "MYSQLHOST"],
     ["DB_PORT", "MYSQLPORT"],

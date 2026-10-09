@@ -36,4 +36,14 @@ app.use(fincasRoutes);
 app.use(calculosRoutes);
 app.use(contactRoutes);
 
+app.use((error, req, res, next) => {
+  if (error.type === "entity.parse.failed" && error.status === 400) {
+    return res.status(400).json({
+      error: "El cuerpo de la solicitud debe contener JSON válido.",
+      code: "invalid_input",
+    });
+  }
+  next(error);
+});
+
 module.exports = app;

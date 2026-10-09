@@ -37,8 +37,8 @@ router.post("/api/contact", async (req, res) => {
   try {
     await transporter.sendMail(mailOptions);
     res.status(200).json({ message: "Correo enviado con éxito." });
-  } catch (error) {
-    console.error("Error enviando correo:", error);
+  } catch {
+    console.error("Error enviando correo.");
     res.status(500).json({ error: "No se pudo enviar el correo." });
   }
 });
