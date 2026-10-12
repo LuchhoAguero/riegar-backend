@@ -166,6 +166,21 @@ test("history GET keeps ownership and descending creation order", async () => {
   assert.deepEqual(state.queries[0].filters, { id: "7", user_id: 42 });
   assert.deepEqual(state.queries[1], { table: "calculos", filters: { finca_id: "7" }, order: ["created_at", "desc"] });
 });
+test("history GET serializes Date timestamps as UTC ISO without local presentation", async () => {
+  state.rows = [{
+    id: 123,
+    created_at: new Date("2026-10-12T15:30:45.000Z"),
+    updated_at: new Date("2026-10-12T16:40:50.000Z"),
+  }];
+  const response = await request(path, undefined, { method: "GET" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, [{
+    id: 123,
+    created_at: "2026-10-12T15:30:45.000Z",
+    updated_at: "2026-10-12T16:40:50.000Z",
+  }]);
+});
+
 test("PUT name keeps ownership and only updates name/timestamp", async () => {
   assert.equal((await request("/api/calculos/123", { nombre_calculo: "Nuevo" }, { method: "PUT" })).status, 200);
   assert.deepEqual(state.queries[0].filters, { "calculos.id": "123", "fincas.user_id": 42 });

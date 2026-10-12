@@ -3,6 +3,37 @@ const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
 const knex = require("knex");
 
+test("runtime and CLI share UTC Date handling independently of host timezone", () => {
+  const script = `
+    const assert = require("node:assert/strict");
+    const { createKnexConfig } = require("./src/config/database");
+    const config = createKnexConfig();
+    const cli = require("./knexfile");
+    const runtime = require("./src/config/knex");
+    const date = new Date("2026-10-12T15:30:45.123Z");
+    try {
+      assert.equal(config.connection.timezone, "Z");
+      assert.equal(runtime.client.connectionSettings.timezone, "Z");
+      for (const environment of ["development", "production"]) {
+        assert.equal(cli[environment].connection.timezone, "Z");
+      }
+      assert.equal(require("mysql2").escape(date, false, config.connection.timezone),
+        "'2026-10-12 15:30:45.123'");
+    } finally { runtime.destroy(); }
+  `;
+  for (const timezone of ["UTC", "America/Buenos_Aires"]) {
+    const result = spawnSync(process.execPath, ["-e", script], {
+      cwd: require("node:path").resolve(__dirname, ".."),
+      env: {
+        ...process.env, TZ: timezone, DB_HOST: "example.invalid", DB_PORT: "3306",
+        DB_USER: "test", DB_PASSWORD: "test-only", DB_NAME: "test", DB_SSL: "false",
+      },
+      encoding: "utf8", timeout: 5000, windowsHide: true,
+    });
+    assert.equal(result.status, 0, "shared UTC policy must pass in both host timezones");
+  }
+});
+
 test("existing migration: offline SQL confirms name capacity and DECIMAL scales", async () => {
   // Compile only: no SQL is executed, no database connection is configured.
   const compiler = knex({ client: "mysql2" });

@@ -17,6 +17,7 @@ function getDatabaseConnection() {
     user: getDatabaseSetting("DB_USER", "MYSQLUSER"),
     password: getDatabaseSetting("DB_PASSWORD", "MYSQLPASSWORD"),
     database: getDatabaseSetting("DB_NAME", "MYSQLDATABASE"),
+    timezone: "Z",
     ...(ssl ? { ssl } : {}),
   };
 }
