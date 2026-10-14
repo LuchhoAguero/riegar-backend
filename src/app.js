@@ -4,6 +4,7 @@ const authRoutes = require("./routes/auth.routes");
 const fincasRoutes = require("./routes/fincas.routes");
 const calculosRoutes = require("./routes/calculos.routes");
 const contactRoutes = require("./routes/contact.routes");
+const irrigationSimulationRoutes = require("./routes/irrigation-simulations.routes");
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || "").split(",")
@@ -35,8 +36,12 @@ app.use(authRoutes);
 app.use(fincasRoutes);
 app.use(calculosRoutes);
 app.use(contactRoutes);
+app.use(irrigationSimulationRoutes);
 
 app.use((error, req, res, next) => {
+  if (error.type === "entity.too.large" && /^\/api\/fincas\/[^/]+\/irrigation-simulations(?:\/|$)/.test(req.path)) {
+    return res.status(413).json({ error: "El cuerpo de la solicitud excede el límite permitido.", code: "PAYLOAD_TOO_LARGE" });
+  }
   if (error.type === "entity.parse.failed" && error.status === 400) {
     return res.status(400).json({
       error: "El cuerpo de la solicitud debe contener JSON válido.",

@@ -42,19 +42,43 @@ router.delete("/api/fincas/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const user_id = req.user.userId;
-    const finca = await knex("fincas").where({ id, user_id }).first();
+    const deleted = await knex.transaction(async (trx) => {
+      // Lock the owned parent while checking dependencies and deleting children.
+      const finca = await trx("fincas").where({ id, user_id }).forUpdate().first();
+      if (!finca) return false;
 
-    if (!finca) {
+      const simulation = await trx("irrigation_simulations")
+        .where({ finca_id: id }).select("id").first();
+      if (simulation) {
+        const conflict = new Error("La finca posee simulaciones de riego guardadas y no puede eliminarse.");
+        conflict.code = "FARM_HAS_IRRIGATION_SIMULATIONS";
+        throw conflict;
+      }
+
+      await trx("calculos").where({ finca_id: id }).del();
+      await trx("fincas").where({ id, user_id }).del();
+      return true;
+    });
+
+    if (!deleted) {
       return res
         .status(404)
         .json({ error: "Finca no encontrada o no tienes permiso." });
     }
 
-    await knex("calculos").where({ finca_id: id }).del();
-    await knex("fincas").where({ id }).del();
-
     res.json({ message: "Finca y sus cálculos eliminados correctamente." });
   } catch (error) {
+    if (error.code === "FARM_HAS_IRRIGATION_SIMULATIONS") {
+      return res.status(409).json({ error: error.message, code: error.code });
+    }
+    // Knex rejects only after rollback. Keep FK failures controlled and generic:
+    // another dependent row must not cause partial loss of Manning history.
+    if (error.code === "ER_ROW_IS_REFERENCED_2" || error.errno === 1451) {
+      return res.status(409).json({
+        error: "La finca tiene registros asociados y no puede eliminarse.",
+        code: "FARM_DELETE_CONFLICT",
+      });
+    }
     console.error("Error al eliminar finca:", error);
     res.status(500).json({ error: "Error en el servidor." });
   }
