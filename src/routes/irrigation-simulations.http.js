@@ -1,4 +1,5 @@
-const { INPUT_CONTRACT } = require("../services/irrigation/irrigation-models");
+const { ACTIVE_DESCRIPTOR, resolveActiveDescriptor } = require("../services/irrigation-simulations.versions");
+const { publicSnapshotVersioned } = require("../services/irrigation-simulations.versioned-mapper");
 const { validatePagination } = require("../services/irrigation-simulations.mapper");
 
 class HttpInputError extends Error {
@@ -15,7 +16,8 @@ function knownFields(value, allowed, field) {
     if (!allowed.includes(key)) throw new HttpInputError("INVALID_REQUEST", `${field}.${key}`, "Campo fuera del contrato HTTP.");
   }
 }
-function postInput(body) {
+function postInput(body, descriptor = ACTIVE_DESCRIPTOR) {
+  const { INPUT_CONTRACT } = resolveActiveDescriptor(descriptor);
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new HttpInputError("INVALID_REQUEST", "body", "El cuerpo debe ser un objeto JSON.");
   }
@@ -58,10 +60,7 @@ function historyQuery(query) {
   }
   return { limit, cursor: query.cursor === undefined ? null : decodeCursor(query.cursor) };
 }
-const METADATA_FIELDS = Object.freeze(["metadataSchemaVersion", "effectiveParameters", "units", "assumptions", "evidenceState",
-  "referenceVersions", "implementationReference", "diagnosticRules", "parameterProvenance"]);
 function publicSnapshot(snapshot) {
-  return { ...snapshot, metadata: Object.fromEntries(METADATA_FIELDS.filter(key => Object.hasOwn(snapshot.metadata, key))
-    .map(key => [key, snapshot.metadata[key]])) };
+  return publicSnapshotVersioned(snapshot);
 }
 module.exports = { HttpInputError, routeId, knownFields, postInput, historyQuery, encodeCursor, publicSnapshot };

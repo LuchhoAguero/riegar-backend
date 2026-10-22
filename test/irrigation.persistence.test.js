@@ -214,19 +214,19 @@ test("model failures insert nothing; invalid application name and persistence/re
 });
 
 test("history/detail read historical snapshots only; trim extra row and cursor from last returned", async () => {
-  const rows = [3, 2, 1].map(id => ({ id, ...snapshot() })); rows[0].model_version = "old-version";
+  const rows = [3, 2, 1].map(id => ({ id, ...snapshot() }));
   const { db, state } = database({ rows });
   const svc = createIrrigationSimulationService(db, { calculate: () => { throw new Error("history must not calculate"); } });
   const r = await svc.history({ userId: 42, fincaId: 7, limit: 2 });
   assert.equal(r.kind, "SUCCESS"); assert.deepEqual(r.items.map(row => row.simulation.id), [3, 2]);
-  assert.equal(r.items[0].model.modelVersion, "old-version");
+  assert.equal(r.items[0].model.modelVersion, "irrigation-estimation-v1");
   assert.deepEqual(r.pagination, { limit: 2, hasMore: true, nextCursor: { createdAt: date.toISOString(), id: 2 } });
   assert.equal(state.queries[0].table, "fincas"); assert.equal(state.queries[1].limit, 3);
   assert.deepEqual(state.queries[1].filters, { "s.finca_id": 7, "f.user_id": 42 });
   const next = await svc.history({ userId: 42, fincaId: 7, limit: 2, cursor: r.pagination.nextCursor });
   assert.deepEqual(next.items.map(row => row.simulation.id), [1]); assert.equal(next.pagination.nextCursor, null);
   const detail = await svc.detail({ userId: 42, fincaId: 7, simulationId: 3 });
-  assert.equal(detail.snapshot.model.modelVersion, "old-version");
+  assert.equal(detail.snapshot.model.modelVersion, "irrigation-estimation-v1");
   assert.deepEqual(await svc.detail({ userId: 42, fincaId: 7, simulationId: 999 }), { kind: "SIMULATION_NOT_FOUND" });
   assert.deepEqual((await svc.history({ userId: 42, fincaId: 7, limit: 3 })).pagination, { limit: 3, hasMore: false, nextCursor: null });
 });

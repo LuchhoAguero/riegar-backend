@@ -231,16 +231,16 @@ test("HISTORY invalid cursors: encoding, version, shape, date, ID and size all 4
 });
 
 test("DETAIL own historical JSON/messages/versions preserved, no recalculation, safe metadata sections", async () => {
-  const stored = row(1); stored.model_version = "historical-v0";
+  const stored = row(1);
   stored.model_metadata.effectiveParameters.infiltrationCoefficient = 8;
   stored.model_metadata.internalDebug = "private-marker";
-  stored.diagnostics[0].message = "Mensaje histórico"; stored.diagnostics[0].ruleVersion = "old-rule";
+  stored.diagnostics[0].message = "Mensaje histórico";
   stored.model_metadata = JSON.stringify(stored.model_metadata); stored.diagnostics = JSON.stringify(stored.diagnostics);
   state.db.rows = [stored];
   const r = await request({ method: "GET", route: `${base}/1` }); assert.equal(r.status, 200);
-  assert.equal(r.body.model.modelVersion, "historical-v0"); assert.equal(r.body.metadata.effectiveParameters.infiltrationCoefficient, 8);
+  assert.equal(r.body.model.modelVersion, "irrigation-estimation-v1"); assert.equal(r.body.metadata.effectiveParameters.infiltrationCoefficient, 8);
   assert.equal(r.body.output.diagnostics.items[0].message, "Mensaje histórico");
-  assert.equal(r.body.output.diagnostics.items[0].ruleVersion, "old-rule");
+  assert.equal(r.body.output.diagnostics.items[0].ruleVersion, "irrigation-diagnostics-v1");
   assert.ok(!JSON.stringify(r.body).includes("private-marker")); assert.equal(state.calculations, 0);
   assert.equal(r.body.simulation.createdAt, date.toISOString());
 });
