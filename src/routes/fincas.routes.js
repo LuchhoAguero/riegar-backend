@@ -21,7 +21,7 @@ router.post("/api/fincas", authMiddleware, async (req, res) => {
 
     res.status(201).json({ message: "Finca creada con éxito.", fincaId: newFincaId });
   } catch (error) {
-    console.error("Error al crear finca:", error);
+    console.error("Error al crear finca.");
     res.status(500).json({ error: "Ocurrió un error en el servidor." });
   }
 });
@@ -33,7 +33,7 @@ router.get("/api/fincas", authMiddleware, async (req, res) => {
 
     res.json(fincas);
   } catch (error) {
-    console.error("Error al obtener fincas:", error);
+    console.error("Error al obtener fincas.");
     res.status(500).json({ error: "Ocurrió un error en el servidor." });
   }
 });
@@ -79,7 +79,7 @@ router.delete("/api/fincas/:id", authMiddleware, async (req, res) => {
         code: "FARM_DELETE_CONFLICT",
       });
     }
-    console.error("Error al eliminar finca:", error);
+    console.error("Error al eliminar finca.");
     res.status(500).json({ error: "Error en el servidor." });
   }
 });
@@ -105,7 +105,7 @@ router.put("/api/fincas/:id", authMiddleware, async (req, res) => {
 
     res.json({ message: "Finca actualizada correctamente." });
   } catch (error) {
-    console.error("Error al actualizar finca:", error);
+    console.error("Error al actualizar finca.");
     res.status(500).json({ error: "Error en el servidor." });
   }
 });

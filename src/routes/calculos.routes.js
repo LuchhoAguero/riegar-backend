@@ -64,7 +64,7 @@ router.post("/api/fincas/:fincaId/calculos", authMiddleware, async (req, res) =>
         fields: error.fields,
       });
     }
-    console.error("Error al guardar el cálculo:", error);
+    console.error("Error al guardar el cálculo.");
     res.status(500).json({ error: "Ocurrió un error en el servidor." });
   }
 });
@@ -87,7 +87,7 @@ router.get("/api/fincas/:fincaId/calculos", authMiddleware, async (req, res) => 
 
     res.json(calculos);
   } catch (error) {
-    console.error("Error al obtener los cálculos:", error);
+    console.error("Error al obtener los cálculos.");
     res.status(500).json({ error: "Ocurrió un error en el servidor." });
   }
 });
@@ -115,7 +115,7 @@ router.put("/api/calculos/:id", authMiddleware, async (req, res) => {
 
     res.json({ message: "Cálculo actualizado correctamente." });
   } catch (error) {
-    console.error("Error al actualizar cálculo:", error);
+    console.error("Error al actualizar cálculo.");
     res.status(500).json({ error: "Error en el servidor." });
   }
 });
@@ -138,7 +138,7 @@ router.delete("/api/calculos/:id", authMiddleware, async (req, res) => {
     await knex("calculos").where({ id }).del();
     res.json({ message: "Cálculo eliminado correctamente." });
   } catch (error) {
-    console.error(error);
+    console.error("Error al eliminar cálculo.");
     res.status(500).json({ error: "Error en el servidor." });
   }
 });

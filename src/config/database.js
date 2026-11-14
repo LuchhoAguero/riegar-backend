@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const { X509Certificate } = require("node:crypto");
 
 require("dotenv").config({ quiet: true });
 
@@ -29,17 +30,25 @@ function getDatabaseSsl() {
   }
   if (enabled === "false") return undefined;
 
-  if (!process.env.DB_SSL_CA_PATH) {
+  const pem = process.env.DB_SSL_CA_PEM;
+  if (pem && process.env.DB_SSL_CA_PATH) {
+    throw new Error("Set only one database CA source");
+  }
+  if (!pem && !process.env.DB_SSL_CA_PATH) {
     throw new Error("DB_SSL_CA_PATH is required when DB_SSL=true");
   }
 
   try {
+    const ca = pem || fs.readFileSync(process.env.DB_SSL_CA_PATH, "utf8");
+    const verifyIdentity = process.env.DB_SSL_VERIFY_IDENTITY === "true";
+    if (pem || verifyIdentity) new X509Certificate(ca);
     return {
-      ca: fs.readFileSync(process.env.DB_SSL_CA_PATH, "utf8"),
+      ca,
       rejectUnauthorized: true,
+      ...(verifyIdentity ? { verifyIdentity: true } : {}),
     };
   } catch {
-    throw new Error("Cannot read the CA certificate at DB_SSL_CA_PATH");
+    throw new Error("Cannot read or validate the database CA certificate");
   }
 }
 
@@ -47,6 +56,10 @@ function createKnexConfig() {
   return {
     client: "mysql2",
     connection: getDatabaseConnection(),
+    ...(process.env.RIEGAR_RUNTIME === "academic-staging" ? {
+      acquireConnectionTimeout: 5000,
+      pool: { min: 0, max: 5 },
+    } : {}),
     migrations: {
       directory: path.resolve(__dirname, "../../db/migrations"),
     },

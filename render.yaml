@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: riegar-demo-academica-api
+    runtime: node
+    plan: free
+    branch: demo-academica
+    autoDeployTrigger: "off"
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/staging-server.js
+    healthCheckPath: /api/ready
+    envVars:
+      - key: NODE_VERSION
+        value: "24.16.0"
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
+      - key: RIEGAR_RUNTIME
+        value: academic-staging
+      - key: RIEGAR_DEMO_ENABLE_V2
+        value: "false"
+      - key: DB_NAME
+        value: riegar_academic_staging
+      - key: DB_USER
+        value: riegar_staging_runtime
+      - key: DB_SSL
+        value: "true"
+      - key: DB_SSL_VERIFY_IDENTITY
+        value: "true"
+      - key: DB_HOST
+        sync: false
+      - key: RIEGAR_STAGING_DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSL_CA_PEM
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true

@@ -25,7 +25,7 @@ router.post("/api/register", async (req, res) => {
       userId: newUserId,
     });
   } catch (error) {
-    console.error("Error al registrar usuario:", error);
+    console.error("Error al registrar usuario.");
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({ error: "El email ya está registrado." });
     }
@@ -61,7 +61,7 @@ router.post("/api/login", async (req, res) => {
 
     res.json({ message: "Login exitoso.", token });
   } catch (error) {
-    console.error("Error en el login:", error);
+    console.error("Error en el login.");
     res.status(500).json({ error: "Ocurrió un error en el servidor." });
   }
 });
