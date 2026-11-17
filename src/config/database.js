@@ -48,7 +48,7 @@ function getDatabaseSsl() {
       ...(verifyIdentity ? { verifyIdentity: true } : {}),
     };
   } catch {
-    throw new Error("Cannot read or validate the database CA certificate");
+    throw Object.assign(new Error("Cannot read or validate the database CA certificate"), { code: "DB_CA_INVALID" });
   }
 }
 
