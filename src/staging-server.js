@@ -1,6 +1,7 @@
 const http = require("node:http");
 const { isIP } = require("node:net");
 const { validateDatabaseConfig } = require("./config/database");
+const { validPublicKey } = require("./staging-trial-budget");
 
 const STARTUP_ERROR_CATEGORIES = Object.freeze({
   STAGING_ENVIRONMENT_INVALID: "environment",
@@ -31,7 +32,7 @@ const ENVIRONMENT_FIELDS = new Set([
   "RENDER", "RIEGAR_RUNTIME", "DB_NAME", "DB_USER", "DB_HOST", "RIEGAR_STAGING_DB_HOST",
   "DB_PORT", "DB_PASSWORD", "DB_SSL", "DB_SSL_VERIFY_IDENTITY", "NODE_TLS_REJECT_UNAUTHORIZED",
   "DB_SSL_CA_PEM", "DB_SSL_CA_PATH", "JWT_SECRET", "CORS_ORIGIN", "PORT", "EMAIL_USER", "EMAIL_PASS",
-  "RIEGAR_DEMO_ENABLE_V2",
+  "RIEGAR_DEMO_ENABLE_V2", "RIEGAR_DEMO_V2_USER_ID", "RIEGAR_DEMO_V2_FARM_ID", "RIEGAR_DEMO_V2_TRIAL_ID", "RIEGAR_DEMO_V2_PUBLIC_KEY",
 ]);
 
 function startupFailure(error, stage) {
@@ -81,7 +82,20 @@ function readStagingEnvironment(env) {
   requireValue(!env.EMAIL_PASS, "EMAIL_PASS");
   requireValue(env.RIEGAR_DEMO_ENABLE_V2 === undefined ||
     ["false", "true"].includes(env.RIEGAR_DEMO_ENABLE_V2), "RIEGAR_DEMO_ENABLE_V2");
-  return { port: Number(env.PORT), origin: env.CORS_ORIGIN, creationEnabled: env.RIEGAR_DEMO_ENABLE_V2 === "true" };
+  const creationEnabled = env.RIEGAR_DEMO_ENABLE_V2 === "true";
+  const creationUserId = env.RIEGAR_DEMO_V2_USER_ID;
+  if (creationEnabled || creationUserId !== undefined) {
+    requireValue(typeof creationUserId === "string" && /^[1-9]\d{0,9}$/.test(creationUserId) &&
+      Number(creationUserId) <= 4294967295, "RIEGAR_DEMO_V2_USER_ID");
+  }
+  if (creationEnabled) {
+    requireValue(typeof env.RIEGAR_DEMO_V2_FARM_ID === "string" && /^[1-9]\d{0,9}$/.test(env.RIEGAR_DEMO_V2_FARM_ID) && Number(env.RIEGAR_DEMO_V2_FARM_ID) <= 4294967295, "RIEGAR_DEMO_V2_FARM_ID");
+    requireValue(typeof env.RIEGAR_DEMO_V2_TRIAL_ID === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(env.RIEGAR_DEMO_V2_TRIAL_ID), "RIEGAR_DEMO_V2_TRIAL_ID");
+    requireValue(validPublicKey(env.RIEGAR_DEMO_V2_PUBLIC_KEY), "RIEGAR_DEMO_V2_PUBLIC_KEY");
+  }
+  return { port: Number(env.PORT), origin: env.CORS_ORIGIN, creationEnabled,
+    ...(creationUserId !== undefined ? { creationUserId: Number(creationUserId) } : {}),
+    ...(creationEnabled ? { creationFarmId: Number(env.RIEGAR_DEMO_V2_FARM_ID), trialId: env.RIEGAR_DEMO_V2_TRIAL_ID, trialPublicKey: env.RIEGAR_DEMO_V2_PUBLIC_KEY } : {}) };
 }
 
 async function databaseReady(db) {
@@ -139,7 +153,7 @@ async function main() {
     stage = "application";
     const { createApp } = require("./app");
     const log = event => console.log(JSON.stringify(event));
-    const app = createApp({ staging: { origin: settings.origin, creationEnabled: settings.creationEnabled, ready: () => databaseReady(db), log } });
+    const app = createApp({ staging: { ...settings, ready: () => databaseReady(db), log } });
     const { server, close } = createStagingServer({ app, destroyDatabase: () => db.destroy(), log });
     server.once("error", () => {
       console.error(JSON.stringify({ event: "staging_listener_failed" }));

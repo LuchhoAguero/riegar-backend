@@ -8,8 +8,16 @@ const irrigationSimulationRoutes = require("./routes/irrigation-simulations.rout
 const auth = require("./middleware/auth.middleware");
 const { createIrrigationSimulationRouter } = require("./routes/irrigation-simulations.router");
 const { ACTIVE_DESCRIPTOR, ACTIVE_V2 } = require("./services/irrigation-simulations.versions");
+const { createTrialBudget } = require("./staging-trial-budget");
 
-function installStagingRoutes(app, { origin, ready, log, creationEnabled }, descriptor) {
+function installStagingRoutes(app, { origin, ready, log, creationEnabled, creationUserId, creationFarmId, trialId, trialPublicKey }, descriptor) {
+  let budget;
+  if (creationEnabled === true) {
+    try { budget = createTrialBudget({ trialId, userId: creationUserId, farmId: creationFarmId, publicKey: trialPublicKey }); }
+    catch { budget = null; }
+  }
+  const canCreate = req => creationEnabled === true && Number.isInteger(creationUserId) &&
+    creationUserId > 0 && creationUserId <= 4294967295 && req.user?.userId === creationUserId && budget?.available() === true;
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     const started = Date.now();
@@ -22,7 +30,7 @@ function installStagingRoutes(app, { origin, ready, log, creationEnabled }, desc
     next();
   });
   app.use(cors({ origin, methods: ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"] }));
+    allowedHeaders: ["Content-Type", "Authorization", "X-Riegar-Trial-Permit"], maxAge: 600 }));
 
   app.get("/api/ready", async (req, res) => {
     try {
@@ -40,14 +48,21 @@ function installStagingRoutes(app, { origin, ready, log, creationEnabled }, desc
       contractVersion: descriptor.contractVersion,
       modelVersion: descriptor.modelVersion,
       sourceHash: descriptor.sourceHash,
-      creationEnabled: creationEnabled === true,
+      creationEnabled: canCreate(req),
+      frontendOrigin: origin,
+      ...(canCreate(req) ? { trial: budget.challenge() } : {}),
     });
   });
-  if (creationEnabled !== true) {
-    app.post("/api/fincas/:fincaId/irrigation-simulations", auth, (req, res) => {
-      res.status(403).json({ error: "La creación de simulaciones está deshabilitada en staging.", code: "SIMULATION_CREATION_DISABLED" });
-    });
-  }
+  app.post("/api/fincas/:fincaId/irrigation-simulations", auth, (req, res, next) => {
+    if (creationEnabled !== true) return res.status(403).json({ error: "La creación de simulaciones está deshabilitada en staging.", code: "SIMULATION_CREATION_DISABLED" });
+    if (!canCreate(req)) return res.status(403).json({ error: "Esta sesión no tiene habilitada la creación de simulaciones.", code: "SIMULATION_CREATION_DISABLED" });
+    if (req.get("Origin") !== origin) return res.status(403).json({ error: "La creación requiere el origen académico autorizado.", code: "ORIGIN_NOT_ALLOWED" });
+    if (String(req.params.fincaId) !== String(creationFarmId) ||
+        !budget.consume(req.get("X-Riegar-Trial-Permit"), { userId: req.user.userId, farmId: creationFarmId })) {
+      return res.status(403).json({ error: "El ensayo requiere una autorización temporal de un solo uso. No se envió al cálculo.", code: "SIMULATION_CREATION_DISABLED" });
+    }
+    next();
+  });
 }
 
 function installDefaultCors(app) {

@@ -4,6 +4,7 @@ const path = require("node:path");
 const { rootCertificates } = require("node:tls");
 const test = require("node:test");
 const { readStagingEnvironment, startupFailure } = require("../src/staging-server");
+const { trialEnvironment } = require("./helpers/staging-trial-fixture.cjs");
 
 const env = {
   RENDER: "true", RIEGAR_RUNTIME: "academic-staging", PORT: "10000",
@@ -85,6 +86,37 @@ test("real entrypoint reports an invalid CORS setting before opening a SQL conne
     event: "staging_start_failed", stage: "environment", category: "environment",
     code: "STAGING_ENVIRONMENT_INVALID", field: "CORS_ORIGIN",
   });
+});
+
+test("V2 requires a single canonical trial user before opening SQL", () => {
+  for (const value of [undefined, "", "0", "-1", "02", "2.0", "2e0", " 2", "2 ", "2\n", "*", "2,3", "4294967296", 2, true]) {
+    assert.throws(() => readStagingEnvironment({ ...env, RIEGAR_DEMO_ENABLE_V2: "true", RIEGAR_DEMO_V2_USER_ID: value }),
+      error => error.code === "STAGING_ENVIRONMENT_INVALID" && error.field === "RIEGAR_DEMO_V2_USER_ID");
+  }
+  for (const value of ["1", "2", "4294967295"]) {
+    const result = readStagingEnvironment({ ...env, RIEGAR_DEMO_ENABLE_V2: "true", ...trialEnvironment(value, 2) });
+    assert.equal(result.creationUserId, Number(value));
+    assert.equal(result.creationEnabled, true);
+  }
+  const disabled = readStagingEnvironment({ ...env, RIEGAR_DEMO_ENABLE_V2: "false", RIEGAR_DEMO_V2_USER_ID: "2" });
+  assert.equal(disabled.creationEnabled, false);
+  assert.equal(disabled.creationUserId, 2);
+});
+
+test("real V2 entrypoint refuses missing or wildcard trial user at environment stage", () => {
+  for (const value of [undefined, "*"]) {
+    assert.deepEqual(runServer({ RIEGAR_DEMO_ENABLE_V2: "true", RIEGAR_DEMO_V2_USER_ID: value }), {
+      event: "staging_start_failed", stage: "environment", category: "environment",
+      code: "STAGING_ENVIRONMENT_INVALID", field: "RIEGAR_DEMO_V2_USER_ID",
+    });
+  }
+});
+
+test("V2 refuses a missing farm, trial ID or signing public key before SQL", () => {
+  for (const field of ["RIEGAR_DEMO_V2_FARM_ID", "RIEGAR_DEMO_V2_TRIAL_ID", "RIEGAR_DEMO_V2_PUBLIC_KEY"]) {
+    const settings = { ...env, RIEGAR_DEMO_ENABLE_V2: "true", ...trialEnvironment(2, 2), [field]: undefined };
+    assert.throws(() => readStagingEnvironment(settings), error => error.field === field);
+  }
 });
 
 test("real entrypoint reports malformed, escaped-newline and missing-file CA before connecting", () => {

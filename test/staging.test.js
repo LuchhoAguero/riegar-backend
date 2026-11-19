@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const { readStagingEnvironment, databaseReady, createStagingServer } = require("../src/staging-server");
 const { createKnexConfig } = require("../src/config/database");
 const { ACTIVE_DESCRIPTOR, ACTIVE_V1, ACTIVE_V2 } = require("../src/services/irrigation-simulations.versions");
+const { trialOptions, trialEnvironment, signChallenge } = require("./helpers/staging-trial-fixture.cjs");
 
 const origin = "https://frontend-staging.invalid";
 const env = {
@@ -18,7 +19,7 @@ const env = {
 
 test("staging rejects unsafe origin, SQL identity, TLS, secrets and mail before serving", () => {
   assert.deepEqual(readStagingEnvironment(env), { port: 4000, origin, creationEnabled: false });
-  assert.equal(readStagingEnvironment({ ...env, RIEGAR_DEMO_ENABLE_V2: "true" }).creationEnabled, true);
+  assert.equal(readStagingEnvironment({ ...env, RIEGAR_DEMO_ENABLE_V2: "true", ...trialEnvironment(7, 1) }).creationEnabled, true);
   for (const [key, value] of Object.entries({
     RENDER: "false", RIEGAR_DEMO_ENABLE_V2: "True", DB_NAME: "defaultdb", DB_HOST: "other.invalid", DB_USER: "root",
     DB_PORT: "0", DB_SSL: "false", DB_SSL_VERIFY_IDENTITY: "false", DB_SSL_CA_PATH: "second-source",
@@ -117,20 +118,30 @@ test("staging HTTP gates, readiness and shutdown use real HTTP with zero databas
     const declared = await request(capability, { headers: { authorization } });
     assert.equal(declared.headers.get("cache-control"), "no-store");
     assert.deepEqual(await declared.json(), { contractVersion: ACTIVE_V1.contractVersion,
-      modelVersion: ACTIVE_V1.modelVersion, sourceHash: ACTIVE_V1.sourceHash, creationEnabled: false });
+      modelVersion: ACTIVE_V1.modelVersion, sourceHash: ACTIVE_V1.sourceHash, creationEnabled: false, frontendOrigin: origin });
     const blocked = await request("/api/fincas/1/irrigation-simulations?version=v2", { method: "POST", headers: { authorization } });
     assert.equal(blocked.status, 403);
     assert.equal((await blocked.json()).code, "SIMULATION_CREATION_DISABLED");
-    const enabled = createApp({ staging: { origin, ready: async () => {}, log, creationEnabled: true } });
+    const enabled = createApp({ staging: { origin, ready: async () => {}, log, creationEnabled: true, ...trialOptions(7, 1) } });
     const demo = enabled.listen(0, "127.0.0.1");
     try {
       await once(demo, "listening");
       const demoOrigin = "http://127.0.0.1:" + demo.address().port;
       const declaredV2 = await fetch(demoOrigin + capability, { headers: { authorization } });
-      assert.deepEqual(await declaredV2.json(), { contractVersion: ACTIVE_V2.contractVersion,
-        modelVersion: ACTIVE_V2.modelVersion, sourceHash: ACTIVE_V2.sourceHash, creationEnabled: true });
-      const invalid = await fetch(demoOrigin + "/api/fincas/1/irrigation-simulations?version=v1", { method: "POST",
+      const { trial, ...description } = await declaredV2.json();
+      assert.ok(trial.bootNonce);
+      assert.deepEqual(description, { contractVersion: ACTIVE_V2.contractVersion,
+        modelVersion: ACTIVE_V2.modelVersion, sourceHash: ACTIVE_V2.sourceHash, creationEnabled: true, frontendOrigin: origin });
+      const missingOrigin = await fetch(demoOrigin + "/api/fincas/1/irrigation-simulations", { method: "POST",
         headers: { authorization, "Content-Type": "application/json" }, body: "{}" });
+      assert.equal(missingOrigin.status, 403);
+      assert.equal((await missingOrigin.json()).code, "ORIGIN_NOT_ALLOWED");
+      const foreignOrigin = await fetch(demoOrigin + "/api/fincas/1/irrigation-simulations", { method: "POST",
+        headers: { authorization, "Content-Type": "application/json", Origin: "https://foreign.invalid" }, body: "{}" });
+      assert.equal(foreignOrigin.status, 403);
+      assert.equal((await foreignOrigin.json()).code, "ORIGIN_NOT_ALLOWED");
+      const invalid = await fetch(demoOrigin + "/api/fincas/1/irrigation-simulations?version=v1", { method: "POST",
+        headers: { authorization, "Content-Type": "application/json", Origin: origin, "X-Riegar-Trial-Permit": signChallenge(trial) }, body: "{}" });
       assert.equal(invalid.status, 400);
     } finally {
       await new Promise((resolve, reject) => demo.close(error => error ? reject(error) : resolve()));
